@@ -18,7 +18,8 @@ describe('rpc', () => {
     resolverType: 'rpc',
     options: {},
     config: undefined,
-    events: [],
+    assertedEvents: [],
+    allEvents: [],
   };
   autoBindSteps(
     loadFeatures(GHERKIN_FLAGD, {

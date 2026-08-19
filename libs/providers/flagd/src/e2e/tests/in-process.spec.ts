@@ -18,7 +18,8 @@ describe('in-process', () => {
     resolverType: 'in-process',
     options: {},
     config: undefined,
-    events: [],
+    assertedEvents: [],
+    allEvents: [],
   };
   autoBindSteps(
     loadFeatures(GHERKIN_FLAGD, {
