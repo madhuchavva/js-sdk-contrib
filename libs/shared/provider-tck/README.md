@@ -102,6 +102,10 @@ call is made. See [`src/lib/scenarioRunner.ts`](./src/lib/scenarioRunner.ts).
 Untagged scenarios are mandatory and always run. `capabilities` defaults to everything — narrow it
 rather than widening it.
 
+A capability whose question cannot be put to your provider *at all* goes in `notApplicable` instead
+of simply being left out. In JavaScript that is `@strict-numeric-typing`, and the distinction is
+the subject of the next section.
+
 ### `@lifecycle` is not `@events`
 
 Provider initialisation used to be gated by `@events`, which was wrong in both directions.
@@ -128,10 +132,85 @@ API exposes only `getNumberDetails`, and the in-memory provider type-checks with
 *indistinguishable* from requesting it as a Float, and **no provider in this language can satisfy
 that scenario** — not because of a defect, but because the distinction does not exist.
 
-So every JavaScript suite leaves the capability undeclared, and the scenario is reported as skipped.
-That is the honest outcome, but it is worth flagging upstream: the capability's meaning is
-language-dependent in a way the specification does not currently acknowledge. Raised on
-[spec#417][tracking].
+So every JavaScript suite leaves the capability out of `capabilities` — but **not** by silently
+omitting it. "This provider has not implemented X" and "X cannot be asked of this provider at all"
+are different claims, and collapsing them would report every JavaScript provider as missing
+something none of them can have. A suite says which it means:
+
+```ts
+runProviderTck({
+  // ...
+  capabilities: [Capability.Events, Capability.ConfigurationChange, Capability.Object],
+  notApplicable: [Capability.StrictNumericTyping],
+});
+```
+
+Gating is identical either way — the scenarios are skipped with the reason in the test name — so
+this changes what is *reported*, not what runs:
+
+```
+○ skipped A float flag is not silently narrowed to an integer — NOT APPLICABLE: @strict-numeric-typing does not apply to this provider
+```
+
+and the [conformance report](#conformance-reports) records the outcome as `not-applicable` rather
+than `not-declared`. Use it only where the capability is unsatisfiable in principle; a provider that
+simply has not implemented something should leave it out of `capabilities` instead. Listing a
+capability in both is rejected.
+
+The capability's meaning being language-dependent is worth flagging upstream regardless, since the
+specification does not currently acknowledge it. Raised on [spec#417][tracking].
+
+## Conformance reports
+
+Set `PROVIDER_TCK_REPORT_DIR` and each suite writes a machine-readable report of its run to
+`<dir>/<name>.json`, conforming to the [report schema][report-schema] in the specification.
+
+```console
+$ PROVIDER_TCK_REPORT_DIR=./reports npx jest
+$ jq '.scenarios | group_by(.outcome) | map({(.[0].outcome): length}) | add' reports/in-memory.json
+{
+  "passed": 24,
+  "not-declared": 4,
+  "not-applicable": 1
+}
+```
+
+It is an environment variable rather than a `TckOptions` field so that emitting a report is a
+property of the *run* and not of the code: CI sets it, a developer running the suite locally does
+not, and no adopter changes a line to publish one. Unset means no report, which is not an error.
+Several suites in one run each write their own file, so flagd's two resolvers do not collide.
+
+**Every scenario appears exactly once**, whatever its outcome. That is what makes Appendix F's rule
+— a scenario skipped for an undeclared capability is reported as skipped and *never* as passed —
+checkable by a consumer rather than dependent on the runner's summary being trustworthy. The
+harness checks the accounting itself at the end of every run, report or no report, and fails the
+suite if a scenario is missing or recorded twice.
+
+Outcomes are recorded where the decision is made rather than scraped back out of a Jest reporter:
+jest-cucumber accepts the `describe`/`test` pair it calls, so the harness wraps them and records a
+skip at the point it is chosen and a pass or failure at the point the test body settles. A scenario
+is registered when it is *defined*, so one Jest never finished — a timeout, or a `-t` filter — still
+appears, as a failure that says so. **A report from a filtered run is partial by construction; do
+not publish one.**
+
+Two fields are worth reading carefully:
+
+- **`provider.name` is what the provider reports through its own metadata**, not the suite name. The
+  suite name is chosen to read well in a failure message — `flagd-rpc` — which makes it the
+  *configuration*, and it is reported as such. One provider with two materially different modes
+  produces two reports that are not interchangeable.
+- **`tck.specRevision` and `tck.assetsTree`** come from
+  [`src/lib/revision.ts`](./src/lib/revision.ts), which
+  [`scripts/write-revision.js`](./scripts/write-revision.js) generates from the submodule. They are
+  captured at build time because the submodule is not part of the published npm package. The tree
+  hash is carried as well as the commit because it identifies the artifacts alone: it is unchanged
+  by unrelated edits elsewhere in the specification, so two runs that executed identical artifacts
+  report the same value even when pinned to different commits — and it is checkable, since
+  `git rev-parse <specRevision>:specification/assets/provider-tck` must reproduce it.
+
+`backend.controlApi` reports how the backend was driven. It is an optional member of
+`BackendControl`, so adding it broke no existing implementation; a control that omits it omits the
+field, which claims nothing either way.
 
 ## Controlling the backend
 
@@ -215,6 +294,12 @@ The two audiences are deliberately different:
   `nx test provider-tck` and `nx package provider-tck` depend on the `pullSpec` target, which runs
   that for you. CI checks out with `submodules: recursive`.
 
+`pullSpec` also regenerates [`src/lib/revision.ts`](./src/lib/revision.ts) from the submodule, so
+the revision a conformance report names is refreshed by the same command that checks the artifacts
+out. That file is committed, because a plain `jest` invocation does not go through Nx and a source
+tree without git should still compile; if git or the submodule is unavailable the generator says so
+and leaves the committed values alone rather than overwriting them with a guess.
+
 Prettier is pointed away from `spec/` so it never rewrites artifacts that are consumed byte for byte
 by every language's TCK.
 
@@ -225,6 +310,7 @@ by every language's TCK.
 - Caching, hooks and flag metadata are not covered.
 
 [appendix-a]: https://github.com/open-feature/spec/blob/main/specification/appendix-a-included-utilities.md
+[report-schema]: https://github.com/open-feature/spec/blob/main/specification/assets/provider-tck/report/conformance-report.schema.json
 [appendix-f]: https://github.com/open-feature/spec/blob/main/specification/appendix-f-provider-conformance.md
 [spec]: https://github.com/open-feature/spec
 [tracking]: https://github.com/open-feature/spec/issues/417

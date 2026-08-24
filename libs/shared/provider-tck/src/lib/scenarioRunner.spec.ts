@@ -1,13 +1,16 @@
 import { loadFeatures, parseFeature } from 'jest-cucumber';
 import { Capability } from './capability';
-import { planScenarios, skipDisplayName } from './scenarioRunner';
+import { planFeature, skipDisplayName } from './scenarioRunner';
 import { FEATURES_GLOB } from './runProviderTck';
 
 /** The canonical features, with `@object` deliberately undeclared so its scenarios are gated. */
 const features = loadFeatures(FEATURES_GLOB);
 
+/** No capability is inapplicable in these cases; that distinction is the report's, not the gate's. */
+const NONE: ReadonlySet<Capability> = new Set();
+
 const plansWithout = (...declared: Capability[]) =>
-  features.flatMap((parsed) => planScenarios(parsed, new Set(declared)));
+  features.flatMap((parsed) => planFeature('synthetic', parsed, new Set(declared)).scenarios);
 
 describe('the capability gate', () => {
   it('names every skipped scenario with the reason it was skipped', () => {
@@ -19,9 +22,9 @@ describe('the capability gate', () => {
 
     expect(gated.length).toBeGreaterThan(0);
     for (const scenario of gated) {
-      expect(skipDisplayName(scenario)).toContain('SKIPPED: provider does not declare');
+      expect(skipDisplayName(scenario, NONE)).toContain('SKIPPED: provider does not declare');
       for (const capability of scenario.missing) {
-        expect(skipDisplayName(scenario)).toContain(capability);
+        expect(skipDisplayName(scenario, NONE)).toContain(capability);
       }
     }
   });
@@ -39,7 +42,7 @@ describe('the capability gate', () => {
     expect(objectScenarios.length).toBeGreaterThan(1);
     for (const scenario of objectScenarios) {
       expect(scenario.missing).toContain(Capability.Object);
-      expect(skipDisplayName(scenario)).toBe(
+      expect(skipDisplayName(scenario, NONE)).toBe(
         `${scenario.title} — SKIPPED: provider does not declare ${Capability.Object}`,
       );
     }
@@ -78,13 +81,13 @@ describe('the capability gate', () => {
       ].join('\n'),
     );
 
-    const planned = planScenarios(parsed, new Set([Capability.Events]));
+    const planned = planFeature('mixed', parsed, new Set([Capability.Events])).scenarios;
 
     expect(planned.map((scenario) => [scenario.title, scenario.missing])).toEqual([
       ['a plain flag', []],
       ['a structured flag', [Capability.Object]],
     ]);
-    expect(skipDisplayName(planned[1])).toContain('@object');
+    expect(skipDisplayName(planned[1], NONE)).toContain('@object');
   });
 
   it('leaves an untagged scenario mandatory whatever the provider declares', () => {

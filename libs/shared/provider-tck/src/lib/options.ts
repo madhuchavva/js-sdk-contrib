@@ -68,6 +68,26 @@ export interface TckOptions {
   capabilities?: readonly Capability[];
 
   /**
+   * Capabilities whose question cannot be put to this provider at all.
+   *
+   * This is **not** a second way of saying "not supported", and collapsing the two would
+   * misrepresent a whole language. `@strict-numeric-typing` asks whether a provider keeps integers
+   * and floats distinct; JavaScript has no integer type, so no provider written in it can answer,
+   * and reporting that as an undeclared capability would show every JavaScript provider as missing
+   * something none of them can have. `notApplicable` says so, and the conformance report
+   * distinguishes `not-applicable` from `not-declared` accordingly.
+   *
+   * Gating is identical either way — the scenarios are skipped with their reason in the test name —
+   * so this changes what is *reported*, not what runs. Use it only where the capability is
+   * unsatisfiable in principle; a provider that simply has not implemented something should leave
+   * it out of {@link capabilities} instead.
+   *
+   * A capability listed here must not also appear in {@link capabilities}; declaring both is
+   * rejected. When {@link capabilities} is omitted it defaults to everything *except* these.
+   */
+  notApplicable?: readonly Capability[];
+
+  /**
    * How long to wait for a provider event, in milliseconds.
    *
    * The single most important knob for a provider author, because providers observe backend changes

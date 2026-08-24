@@ -32,12 +32,6 @@ runProviderTck({
    *   does not implement ConnectionControl for the same reason, and the two omissions keep each
    *   other honest: the scenarios are skipped before any step can reach an operation the control
    *   cannot perform.
-   * - StrictNumericTyping is omitted because **JavaScript has no integer type**. `typeof 10` and
-   *   `typeof 0.5` are both 'number', the Evaluation API exposes only getNumberDetails, and the
-   *   in-memory provider type-checks with `typeof value != typeof defaultValue`. Asking for
-   *   float-flag as an Integer is therefore indistinguishable from asking for it as a Float, and no
-   *   provider in this language can satisfy that scenario. This is a language property, not a bug —
-   *   see the README.
    * - Lifecycle is omitted because there is no backend to reach. InMemoryProvider has no
    *   initialisation step, so the SDK synthesises PROVIDER_READY for it and the readiness scenario
    *   would pass without demonstrating anything — a NoOpProvider passes it identically. It was
@@ -49,4 +43,19 @@ runProviderTck({
    * equivalents do not. It is the reference behaviour Appendix A describes.
    */
   capabilities: [Capability.Events, Capability.ConfigurationChange, Capability.Object],
+
+  /*
+   * StrictNumericTyping is not merely undeclared, it is inapplicable, and the conformance report
+   * says so with a separate outcome.
+   *
+   * **JavaScript has no integer type.** `typeof 10` and `typeof 0.5` are both 'number', the
+   * Evaluation API exposes only getNumberDetails, and the in-memory provider type-checks with
+   * `typeof value != typeof defaultValue`. Asking for float-flag as an Integer is therefore
+   * indistinguishable from asking for it as a Float, and no provider in this language can satisfy
+   * that scenario — not because of a defect, but because the distinction does not exist here.
+   *
+   * Reporting that as 'not-declared' would show every JavaScript provider as missing something no
+   * JavaScript provider can have. See the README.
+   */
+  notApplicable: [Capability.StrictNumericTyping],
 });

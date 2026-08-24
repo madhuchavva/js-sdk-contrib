@@ -1,10 +1,12 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { autoBindSteps, loadFeatures } from 'jest-cucumber';
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, extname, join } from 'node:path';
+import { autoBindSteps, loadFeature } from 'jest-cucumber';
 import { OpenFeature } from '@openfeature/server-sdk';
 import { ALL_CAPABILITIES, Capability } from './capability';
 import type { TckOptions } from './options';
-import { planScenarios, scenarioRunner } from './scenarioRunner';
+import { ConformanceRecorder, coverageProblems, writeConformanceReport } from './report';
+import type { FeaturePlan } from './scenarioRunner';
+import { planFeature, scenarioRunner } from './scenarioRunner';
 import { TckState } from './state';
 import { eventSteps } from './steps/eventSteps';
 import { flagSteps } from './steps/flagSteps';
@@ -70,6 +72,26 @@ function resolveAssetDir(name: string): string {
 /** The glob matching the canonical feature files packaged with this library. */
 export const FEATURES_GLOB = join(resolveAssetDir('features'), '*.feature');
 
+/**
+ * The canonical feature files, in a fixed order, each paired with its bare name.
+ *
+ * jest-cucumber's `loadFeatures` globs internally and returns parsed features with no indication of
+ * which file each came from, in whatever order the glob produced. Both matter here: the conformance
+ * report records the feature a scenario belongs to as its file name, and a stable order makes two
+ * runs comparable. Reading the directory directly gives both.
+ */
+function loadTckFeatures(tagFilter: string | undefined): { feature: string; parsed: ReturnType<typeof loadFeature> }[] {
+  const dir = resolveAssetDir('features');
+
+  return readdirSync(dir)
+    .filter((entry) => extname(entry) === '.feature')
+    .sort()
+    .map((entry) => ({
+      feature: basename(entry, '.feature'),
+      parsed: loadFeature(join(dir, entry), { tagFilter }),
+    }));
+}
+
 /** The canonical flag set, as raw JSON, for a suite that seeds a backend from it. */
 export const CANONICAL_FLAGS_PATH = join(resolveAssetDir('flags'), 'canonical-flags.json');
 
@@ -97,8 +119,23 @@ export const CONTROL_API_PATH = join(resolveAssetDir('openapi'), 'control-api.ya
  * the same file would register the vocabulary twice and every step would report as ambiguous.
  */
 export function runProviderTck(options: TckOptions): void {
-  const declared = new Set<Capability>(options.capabilities ?? ALL_CAPABILITIES);
+  const notApplicable = new Set<Capability>(options.notApplicable ?? []);
+  // Defaulting to everything *except* the inapplicable ones is the only reading that makes the two
+  // fields composable: a suite that names only what cannot apply should not have to restate the
+  // whole capability set to say so.
+  const declared = new Set<Capability>(
+    options.capabilities ?? ALL_CAPABILITIES.filter((capability) => !notApplicable.has(capability)),
+  );
   const undeclared = ALL_CAPABILITIES.filter((capability) => !declared.has(capability));
+
+  const contradictory = [...declared].filter((capability) => notApplicable.has(capability));
+  if (contradictory.length) {
+    throw new Error(
+      `capabilities and notApplicable both list ${contradictory.join(' ')}. A capability is either ` +
+        `something this provider supports or something it cannot be asked about, and the ` +
+        `conformance report has to say which.`,
+    );
+  }
 
   if (declared.has(Capability.UnavailableInit) && !options.newUnavailableProvider) {
     throw new Error(
@@ -110,26 +147,38 @@ export function runProviderTck(options: TckOptions): void {
 
   const state = new TckState(options);
 
+  const recorder = new ConformanceRecorder({
+    suiteName: options.name,
+    control: options.control,
+    declared,
+    notApplicable,
+    observedProviderName: () => state.providerName,
+  });
+
   // Undeclared capabilities are excluded here, which marks their scenarios `skippedViaTagFilter`.
   // jest-cucumber turns that into `test.skip`, so they are reported as SKIPPED rather than quietly
   // omitted -- which is the whole point. The reason travels in the scenario name, because Jest has
   // nowhere else to put it.
   const tagFilter = undeclared.length ? undeclared.map((capability) => `not ${capability}`).join(' and ') : undefined;
 
-  // jest-cucumber owns the test and test.skip calls and accepts a runner to make them through, so
-  // the harness supplies one per feature. That is the only seam that reaches a Scenario Outline's
-  // example rows: `scenarioNameTemplate` never does.
-  const features = loadFeatures(FEATURES_GLOB, { tagFilter });
-  for (const parsed of features) {
-    parsed.options.runner = scenarioRunner(parsed.title, planScenarios(parsed, declared));
-  }
+  const features = loadTckFeatures(tagFilter);
+  const plans: FeaturePlan[] = features.map(({ feature, parsed }) => planFeature(feature, parsed, declared));
+
+  // jest-cucumber owns the test and test.skip calls, and accepts a runner to make them through, so
+  // the harness supplies one per feature. Recording the outcome there means it is captured where the
+  // decision is made rather than scraped back out of a reporter afterwards, and it is the only seam
+  // that reaches a Scenario Outline's example rows.
+  features.forEach(({ parsed }, position) => {
+    parsed.options.runner = scenarioRunner(plans[position], recorder, notApplicable);
+  });
 
   describe(`provider-tck [${options.name}]`, () => {
     beforeAll(() => {
       // eslint-disable-next-line no-console
       console.log(
         `provider-tck [${options.name}]: backend under test is ${options.control.description}; ` +
-          `declared capabilities ${[...declared].sort().join(' ') || '(none)'}`,
+          `declared capabilities ${[...declared].sort().join(' ') || '(none)'}` +
+          (notApplicable.size ? `; not applicable ${[...notApplicable].sort().join(' ')}` : ''),
       );
     });
 
@@ -149,6 +198,32 @@ export function runProviderTck(options: TckOptions): void {
       await OpenFeature.clearProviders();
     });
 
-    autoBindSteps(features, [providerSteps(state), flagSteps(state), eventSteps(state)]);
+    autoBindSteps(
+      features.map(({ parsed }) => parsed),
+      [providerSteps(state), flagSteps(state), eventSteps(state)],
+    );
+
+    afterAll(() => {
+      // Appendix F's rule is that a scenario skipped for an undeclared capability is reported as
+      // skipped and never as passed. That is only checkable if the report accounts for every
+      // scenario, so the accounting is verified here rather than assumed -- in every run, not only
+      // when a report is being written.
+      const planned = plans.flatMap((plan) =>
+        plan.scenarios.map(({ title }) => ({ feature: plan.feature, name: title })),
+      );
+      const problems = coverageProblems(recorder.results, planned);
+      if (problems.length) {
+        throw new Error(
+          `provider-tck [${options.name}]: the conformance report does not account for every ` +
+            `scenario exactly once, so it cannot be trusted:\n  ${problems.join('\n  ')}`,
+        );
+      }
+
+      const path = writeConformanceReport(recorder, options.name);
+      if (path) {
+        // eslint-disable-next-line no-console
+        console.log(`provider-tck [${options.name}]: conformance report written to ${path}`);
+      }
+    });
   });
 }
