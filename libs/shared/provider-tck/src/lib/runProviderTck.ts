@@ -3,6 +3,8 @@ import { basename, extname, join } from 'node:path';
 import { autoBindSteps, loadFeature } from 'jest-cucumber';
 import { OpenFeature } from '@openfeature/server-sdk';
 import { ALL_CAPABILITIES, Capability } from './capability';
+import type { ExampleTable } from './examples';
+import { readExampleTables } from './examples';
 import type { TckOptions } from './options';
 import { ConformanceRecorder, coverageProblems, writeConformanceReport } from './report';
 import type { FeaturePlan } from './scenarioRunner';
@@ -72,15 +74,23 @@ function resolveAssetDir(name: string): string {
 /** The glob matching the canonical feature files packaged with this library. */
 export const FEATURES_GLOB = join(resolveAssetDir('features'), '*.feature');
 
+/** One canonical feature file: its bare name, jest-cucumber's parse of it, and its Examples rows. */
+export interface TckFeature {
+  feature: string;
+  parsed: ReturnType<typeof loadFeature>;
+  examples: ExampleTable[];
+}
+
 /**
- * The canonical feature files, in a fixed order, each paired with its bare name.
+ * The canonical feature files, in a fixed order, each paired with its bare name and Examples rows.
  *
  * jest-cucumber's `loadFeatures` globs internally and returns parsed features with no indication of
  * which file each came from, in whatever order the glob produced. Both matter here: the conformance
  * report records the feature a scenario belongs to as its file name, and a stable order makes two
- * runs comparable. Reading the directory directly gives both.
+ * runs comparable. Reading the directory directly gives both, and gives the path each file's
+ * Examples tables are read from -- which jest-cucumber discards during expansion.
  */
-function loadTckFeatures(tagFilter: string | undefined): { feature: string; parsed: ReturnType<typeof loadFeature> }[] {
+export function loadTckFeatures(tagFilter: string | undefined): TckFeature[] {
   const dir = resolveAssetDir('features');
 
   return readdirSync(dir)
@@ -89,6 +99,7 @@ function loadTckFeatures(tagFilter: string | undefined): { feature: string; pars
     .map((entry) => ({
       feature: basename(entry, '.feature'),
       parsed: loadFeature(join(dir, entry), { tagFilter }),
+      examples: readExampleTables(join(dir, entry)),
     }));
 }
 
@@ -162,7 +173,9 @@ export function runProviderTck(options: TckOptions): void {
   const tagFilter = undeclared.length ? undeclared.map((capability) => `not ${capability}`).join(' and ') : undefined;
 
   const features = loadTckFeatures(tagFilter);
-  const plans: FeaturePlan[] = features.map(({ feature, parsed }) => planFeature(feature, parsed, declared));
+  const plans: FeaturePlan[] = features.map(({ feature, parsed, examples }) =>
+    planFeature(feature, parsed, examples, declared),
+  );
 
   // jest-cucumber owns the test and test.skip calls, and accepts a runner to make them through, so
   // the harness supplies one per feature. Recording the outcome there means it is captured where the
@@ -209,7 +222,7 @@ export function runProviderTck(options: TckOptions): void {
       // scenario, so the accounting is verified here rather than assumed -- in every run, not only
       // when a report is being written.
       const planned = plans.flatMap((plan) =>
-        plan.scenarios.map(({ title }) => ({ feature: plan.feature, name: title })),
+        plan.scenarios.map(({ name, example }) => ({ feature: plan.feature, name, example })),
       );
       const problems = coverageProblems(recorder.results, planned);
       if (problems.length) {
