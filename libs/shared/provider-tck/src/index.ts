@@ -25,6 +25,8 @@ export { asConnectionControl, unsupportedControl } from './lib/control';
 export type { BackendControl, ConnectionControl } from './lib/control';
 export { CHANGING_BASELINE, CHANGING_CHANGED, CHANGING_FLAG_KEY, canonicalFlagSet } from './lib/flags';
 export type { FlagConfiguration } from './lib/flags';
+export { DEFAULT_CONFIGURATION, DEFAULT_CONTROL_TIMEOUT_MS, HttpControl } from './lib/httpControl';
+export type { HttpControlOptions } from './lib/httpControl';
 export { InProcessControl } from './lib/inProcessControl';
 export { DEFAULT_EVENT_TIMEOUT_MS, DEFAULT_READY_TIMEOUT_MS, domainFor } from './lib/options';
 export type { ProviderFactory, TckOptions } from './lib/options';
