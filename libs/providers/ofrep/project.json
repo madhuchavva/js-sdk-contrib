@@ -29,6 +29,20 @@
         "jestConfig": "libs/providers/ofrep/jest.config.ts"
       }
     },
+    "e2e": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/providers/ofrep"],
+      "options": {
+        "jestConfig": "libs/providers/ofrep/src/e2e/jest.config.ts",
+        "parallel": false
+      },
+      "dependsOn": [
+        {
+          "projects": ["flagd-core"],
+          "target": "pullTestHarness"
+        }
+      ]
+    },
     "package": {
       "executor": "@nx/rollup:rollup",
       "outputs": ["{options.outputPath}"],
