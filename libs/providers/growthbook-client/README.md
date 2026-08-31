@@ -35,6 +35,25 @@ const initOptions: InitOptions = {
 OpenFeature.setProvider(new GrowthbookClientProvider(gbContext, initOptions));
 ```
 
+### Evaluation reasons
+
+GrowthBook's evaluation `source` is mapped onto the standard OpenFeature reasons,
+and the raw source is kept in flag metadata:
+
+| GrowthBook source                   | OpenFeature reason | Error code       |
+| ----------------------------------- | ------------------ | ---------------- |
+| `experiment`                        | `SPLIT`            |                  |
+| `force`, `override`, `prerequisite` | `TARGETING_MATCH`  |                  |
+| `defaultValue`                      | `DEFAULT`          |                  |
+| `unknownFeature`                    | `ERROR`            | `FLAG_NOT_FOUND` |
+| `cyclicPrerequisite`                | `ERROR`            | `PARSE_ERROR`    |
+
+```typescript
+const details = await client.getBooleanDetails('my-flag', false, context);
+details.reason; // 'SPLIT'
+details.flagMetadata.source; // 'experiment'
+```
+
 ## Building
 
 Run `nx package providers-growthbook-client` to build the library.
