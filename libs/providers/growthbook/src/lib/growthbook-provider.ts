@@ -1,6 +1,12 @@
 import type { ClientOptions, InitOptions } from '@growthbook/growthbook';
 import { GrowthBookClient } from '@growthbook/growthbook';
-import type { EvaluationContext, Provider, JsonValue, ResolutionDetails } from '@openfeature/server-sdk';
+import type {
+  EvaluationContext,
+  Provider,
+  JsonValue,
+  ResolutionDetails,
+  TrackingEventDetails,
+} from '@openfeature/server-sdk';
 import { OpenFeatureEventEmitter, GeneralError, ProviderEvents } from '@openfeature/server-sdk';
 import translateResult from './translate-result';
 import { toAttributes } from './context-mapper';
@@ -108,5 +114,16 @@ export class GrowthbookProvider implements Provider {
     const res = this.client.evalFeature(flagKey, userContext);
 
     return translateResult(res, defaultValue);
+  }
+  /**
+   * Forward an OpenFeature tracking event to GrowthBook.
+   *
+   * The evaluation context becomes the GrowthBook user context, so the event is
+   * attributed to the same user the flag evaluations are bucketed for.
+   */
+  track(trackingEventName: string, context: EvaluationContext, trackingEventDetails: TrackingEventDetails): void {
+    this.client.logEvent(trackingEventName, trackingEventDetails, {
+      attributes: toAttributes(context),
+    });
   }
 }

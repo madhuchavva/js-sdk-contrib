@@ -47,6 +47,16 @@ await client.getBooleanValue('my-flag', false, { targetingKey: 'user-123' });
 If you set an `id` attribute explicitly it takes precedence over `targetingKey`.
 All other attributes are passed through to GrowthBook unchanged.
 
+## Tracking
+
+OpenFeature tracking events are forwarded to GrowthBook via `logEvent`. The web
+client attributes events to the current context set through
+`OpenFeature.setContext`.
+
+```typescript
+client.track('purchase', { value: 42 });
+```
+
 ## Building
 
 Run `nx package providers-growthbook-client` to build the library.

@@ -214,4 +214,17 @@ describe('GrowthbookProvider', () => {
       });
     });
   });
+  describe('track', () => {
+    it('forwards the event to GrowthBook with the mapped user context', async () => {
+      const logEvent = jest.spyOn(GrowthBookClient.prototype, 'logEvent').mockImplementation(() => undefined);
+
+      ofClient.track('purchase', { targetingKey: 'user-123', country: 'US' }, { value: 42 });
+
+      expect(logEvent).toHaveBeenCalledWith(
+        'purchase',
+        { value: 42 },
+        { attributes: { id: 'user-123', country: 'US' } },
+      );
+    });
+  });
 });

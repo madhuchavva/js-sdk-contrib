@@ -1,4 +1,10 @@
-import type { EvaluationContext, Provider, JsonValue, ResolutionDetails } from '@openfeature/web-sdk';
+import type {
+  EvaluationContext,
+  Provider,
+  JsonValue,
+  ResolutionDetails,
+  TrackingEventDetails,
+} from '@openfeature/web-sdk';
 import { GeneralError, OpenFeatureEventEmitter, ProviderEvents } from '@openfeature/web-sdk';
 
 import type { InitOptions, Context } from '@growthbook/growthbook';
@@ -81,5 +87,16 @@ export class GrowthbookClientProvider implements Provider {
     const res = this.client.evalFeature(flagKey);
 
     return translateResult(res, defaultValue);
+  }
+  /**
+   * Forward an OpenFeature tracking event to GrowthBook.
+   *
+   * The web client already carries the current context as its attributes, so the
+   * event is attributed to whoever OpenFeature.setContext last set. GrowthBook's
+   * logEvent returns a promise; it is intentionally not awaited, since track()
+   * is synchronous by contract and tracking must not block the caller.
+   */
+  track(trackingEventName: string, context: EvaluationContext, trackingEventDetails: TrackingEventDetails): void {
+    void this.client.logEvent(trackingEventName, trackingEventDetails);
   }
 }
