@@ -3,6 +3,7 @@ import { GrowthBookClient } from '@growthbook/growthbook';
 import type { EvaluationContext, Provider, JsonValue, ResolutionDetails } from '@openfeature/server-sdk';
 import { OpenFeatureEventEmitter, GeneralError, ProviderEvents } from '@openfeature/server-sdk';
 import translateResult from './translate-result';
+import { toAttributes } from './context-mapper';
 
 export class GrowthbookProvider implements Provider {
   metadata = {
@@ -31,7 +32,10 @@ export class GrowthbookProvider implements Provider {
   async initialize(evalContext?: EvaluationContext): Promise<void> {
     // Use context to construct the instance to instantiate GrowthBook
     const globalContext = {
-      globalAttributes: { ...this.options.globalAttributes, ...evalContext },
+      globalAttributes: {
+        ...this.options.globalAttributes,
+        ...(evalContext ? toAttributes(evalContext) : {}),
+      },
     };
     this._client = new GrowthBookClient({ ...this.options, ...globalContext });
 
@@ -56,7 +60,7 @@ export class GrowthbookProvider implements Provider {
     context: EvaluationContext,
   ): Promise<ResolutionDetails<boolean>> {
     const userContext = {
-      attributes: context,
+      attributes: toAttributes(context),
     };
 
     const res = this.client.evalFeature(flagKey, userContext);
@@ -70,7 +74,7 @@ export class GrowthbookProvider implements Provider {
     context: EvaluationContext,
   ): Promise<ResolutionDetails<string>> {
     const userContext = {
-      attributes: context,
+      attributes: toAttributes(context),
     };
 
     const res = this.client.evalFeature(flagKey, userContext);
@@ -84,7 +88,7 @@ export class GrowthbookProvider implements Provider {
     context: EvaluationContext,
   ): Promise<ResolutionDetails<number>> {
     const userContext = {
-      attributes: context,
+      attributes: toAttributes(context),
     };
 
     const res = this.client.evalFeature(flagKey, userContext);
@@ -98,7 +102,7 @@ export class GrowthbookProvider implements Provider {
     context: EvaluationContext,
   ): Promise<ResolutionDetails<U>> {
     const userContext = {
-      attributes: context,
+      attributes: toAttributes(context),
     };
 
     const res = this.client.evalFeature(flagKey, userContext);

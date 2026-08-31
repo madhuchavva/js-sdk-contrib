@@ -5,6 +5,7 @@ import type { InitOptions, Context } from '@growthbook/growthbook';
 import { GrowthBook } from '@growthbook/growthbook';
 import isEmpty from 'lodash.isempty';
 import translateResult from './translate-result';
+import { toAttributes } from './context-mapper';
 
 export class GrowthbookClientProvider implements Provider {
   metadata = {
@@ -36,7 +37,7 @@ export class GrowthbookClientProvider implements Provider {
 
     if (!isEmpty(evalContext)) {
       // Set attributes from the global provider context
-      await this.client.setAttributes(evalContext);
+      await this.client.setAttributes(toAttributes(evalContext));
     }
 
     await this.client.init(this._initOptions);
@@ -55,7 +56,7 @@ export class GrowthbookClientProvider implements Provider {
   }
 
   async onContextChange(oldContext: EvaluationContext, newContext: EvaluationContext): Promise<void> {
-    await this.client.setAttributes(newContext);
+    await this.client.setAttributes(toAttributes(newContext));
   }
 
   resolveBooleanEvaluation(flagKey: string, defaultValue: boolean): ResolutionDetails<boolean> {
