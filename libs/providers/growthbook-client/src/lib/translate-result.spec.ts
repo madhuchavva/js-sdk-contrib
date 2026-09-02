@@ -75,8 +75,8 @@ describe('translateResult', () => {
   it.each<[FeatureResultSource, string]>([
     ['experiment', 'SPLIT'],
     ['force', 'TARGETING_MATCH'],
-    ['override', 'TARGETING_MATCH'],
-    ['prerequisite', 'TARGETING_MATCH'],
+    ['override', 'STATIC'],
+    ['prerequisite', 'DEFAULT'],
     ['defaultValue', 'DEFAULT'],
     ['unknownFeature', 'ERROR'],
     ['cyclicPrerequisite', 'ERROR'],

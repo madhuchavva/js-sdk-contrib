@@ -16,9 +16,19 @@ function translateReason(source: FeatureResultSource): ResolutionReason {
     case 'experiment':
       return StandardResolutionReasons.SPLIT;
     case 'force':
-    case 'override':
-    case 'prerequisite':
+      // Lossy by necessity: GrowthBook reports "force" for forced rules
+      // whether or not the rule carried conditions or rollout coverage, and
+      // the FeatureResult does not include the rule definition. Consumers
+      // needing the distinction can read flagMetadata.source and the rule id.
       return StandardResolutionReasons.TARGETING_MATCH;
+    case 'override':
+      // Overrides are programmatic forces, not user targeting.
+      return StandardResolutionReasons.STATIC;
+    case 'prerequisite':
+      // A prerequisite-blocked feature carries a null value and falls back to
+      // the caller's default, which is a DEFAULT outcome, not a targeting
+      // match on the caller's own attributes.
+      return StandardResolutionReasons.DEFAULT;
     case 'defaultValue':
       return StandardResolutionReasons.DEFAULT;
     case 'unknownFeature':
