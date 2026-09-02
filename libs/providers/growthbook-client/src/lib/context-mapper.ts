@@ -12,13 +12,18 @@ import type { Attributes } from '@growthbook/growthbook';
  *
  * An explicitly supplied `id` wins over `targetingKey`: setting both is the
  * portable pattern, and the caller's named attribute should not be overwritten.
+ * The targeting key is also forwarded under its own name, preserving the
+ * provider's original pass-through behaviour for rules that reference it.
  */
 export function toAttributes(context: EvaluationContext): Attributes {
-  const { targetingKey, ...rest } = context;
-  const attributes: Attributes = { ...rest };
+  // The whole context passes through unchanged, targetingKey included: the
+  // provider historically forwarded the evaluation context verbatim, so
+  // GrowthBook rules or custom-hash rollouts written against a "targetingKey"
+  // attribute must keep matching.
+  const attributes: Attributes = { ...context };
 
-  if (targetingKey !== undefined && attributes['id'] === undefined) {
-    attributes['id'] = targetingKey;
+  if (context.targetingKey !== undefined && attributes['id'] === undefined) {
+    attributes['id'] = context.targetingKey;
   }
 
   return attributes;

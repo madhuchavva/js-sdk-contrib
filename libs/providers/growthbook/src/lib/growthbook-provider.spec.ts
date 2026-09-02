@@ -194,7 +194,7 @@ describe('GrowthbookProvider', () => {
       await ofClient.getBooleanDetails(testFlagKey, false, { targetingKey: 'user-123', country: 'US' });
 
       expect(evalFeature).toHaveBeenCalledWith(testFlagKey, {
-        attributes: { id: 'user-123', country: 'US' },
+        attributes: { id: 'user-123', targetingKey: 'user-123', country: 'US' },
       });
     });
 
@@ -210,7 +210,7 @@ describe('GrowthbookProvider', () => {
       await ofClient.getBooleanDetails(testFlagKey, false, { targetingKey: 'ignored', id: 'explicit' });
 
       expect(evalFeature).toHaveBeenCalledWith(testFlagKey, {
-        attributes: { id: 'explicit' },
+        attributes: { id: 'explicit', targetingKey: 'ignored' },
       });
     });
   });
@@ -223,7 +223,7 @@ describe('GrowthbookProvider', () => {
       expect(logEvent).toHaveBeenCalledWith(
         'purchase',
         { value: 42 },
-        { attributes: { id: 'user-123', country: 'US' } },
+        { attributes: { id: 'user-123', targetingKey: 'user-123', country: 'US' } },
       );
     });
   });

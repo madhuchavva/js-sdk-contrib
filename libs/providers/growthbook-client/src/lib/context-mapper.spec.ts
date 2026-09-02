@@ -2,24 +2,26 @@ import { toAttributes } from './context-mapper';
 
 describe('toAttributes', () => {
   it('maps targetingKey onto the id attribute GrowthBook buckets on', () => {
-    expect(toAttributes({ targetingKey: 'user-123' })).toEqual({ id: 'user-123' });
+    expect(toAttributes({ targetingKey: 'user-123' })).toEqual({ id: 'user-123', targetingKey: 'user-123' });
   });
 
   it('passes other attributes through untouched', () => {
     expect(toAttributes({ targetingKey: 'user-123', country: 'US', premium: true })).toEqual({
       id: 'user-123',
+      targetingKey: 'user-123',
       country: 'US',
       premium: true,
     });
   });
 
-  it('does not leak targetingKey through as its own attribute', () => {
-    expect(toAttributes({ targetingKey: 'user-123' })).not.toHaveProperty('targetingKey');
+  it('also preserves targetingKey verbatim for rules that reference it directly', () => {
+    expect(toAttributes({ targetingKey: 'user-123' })).toHaveProperty('targetingKey', 'user-123');
   });
 
   it('prefers an explicit id over targetingKey', () => {
     expect(toAttributes({ targetingKey: 'from-targeting-key', id: 'explicit' })).toEqual({
       id: 'explicit',
+      targetingKey: 'from-targeting-key',
     });
   });
 
